@@ -6,3 +6,7 @@ playwright-report
 *-preview.png
 *.tsbuildinfo
 *.log
+.env*
+supabase
+tests
+playwright-report

@@ -11,26 +11,33 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "tsx --test tests/finance.test.ts tests/wallets.test.ts",
+    "test": "tsx --test tests/finance.test.ts tests/wallets.test.ts tests/account.test.ts tests/database.test.ts",
     "test:e2e": "playwright test",
+    "test:live": "node scripts/run-live-tests.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
+  "overrides": {
+    "postcss": "^8.5.28"
+  },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
+    "lucide-react": "^0.468.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "lucide-react": "^0.468.0",
     "recharts": "^3.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
+    "@axe-core/playwright": "^4.13.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "@eslint/eslintrc": "^3.0.0",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.5.0",
-    "@eslint/eslintrc": "^3.0.0",
     "tsx": "^4.20.0",
-    "@playwright/test": "^1.55.0"
+    "typescript": "^5.9.0"
   }
 }

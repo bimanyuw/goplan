@@ -1,0 +1,50 @@
+import {test,expect} from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import {createClient} from '@supabase/supabase-js';
+import {liveAdmin,createTestUser} from './helpers/live-supabase';
+import {todayJakarta} from '../src/lib/account';
+test.describe('hosted Supabase integration',()=>{
+  test.skip(process.env.GOPLAN_LIVE_TESTS!=='1','Run npm run test:live to create and clean up synthetic accounts in the new GoPlan project.');
+  test.setTimeout(120000);
+  let admin:Awaited<ReturnType<typeof liveAdmin>>;
+  const users:Awaited<ReturnType<typeof createTestUser>>[]=[];
+  test.beforeAll(async()=>{admin=await liveAdmin();});
+  test.afterAll(async()=>{for(const user of users){const {error}=await admin.auth.admin.deleteUser(user.id);if(error&&error.status!==404) throw new Error('Test account cleanup failed: '+user.id);}});
+  test('real account persists finances, supports keyboard dialogs, editing, export, and deletion',async({page})=>{
+    const user=await createTestUser(admin);users.push(user);
+    const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto('/');await page.getByLabel('Email',{exact:true}).fill(user.email);await page.getByLabel('Kata sandi',{exact:true}).fill(user.password);await page.getByRole('button',{name:'Masuk',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Ringkasan',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Tambahkan dompet pertama'}).click();
+    await page.getByLabel('Nama dompet').fill('Tunai');await page.getByLabel('Saldo awal (Rp)').fill('500000');await page.getByRole('button',{name:'Simpan dompet'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Atur anggaran bulan ini'}).click();
+    await page.getByLabel('Total anggaran bulanan (Rp)').fill('2000000');await page.getByLabel('Alokasi Makan & minum (Rp)').fill('750000');await page.getByLabel('Target tabungan (Rp)').fill('300000');await page.getByRole('button',{name:'Simpan anggaran & target'}).click();await expect(page.getByText('Anggaran dan target bulan ini tersimpan.')).toBeVisible();
+    await page.getByRole('button',{name:'Dompet',exact:true}).click();await page.getByRole('button',{name:'Tambah dompet',exact:true}).click();await page.getByLabel('Nama dompet').fill('Bank utama');await page.getByLabel('Jenis dompet').selectOption('bank');await page.getByRole('button',{name:'Simpan dompet'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Catat pemasukan',exact:true}).click();await page.getByLabel('Nama catatan').fill('Uang saku');await page.getByLabel('Nominal (Rp)').fill('1000000');await page.getByLabel('Dompet penerima').selectOption({label:'Bank utama · Rp0'});await page.getByRole('button',{name:'Simpan pemasukan'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Catat transfer antar-dompet'}).click();await page.getByLabel('Nama catatan').fill('Tarik tunai');await page.getByLabel('Nominal (Rp)').fill('100000');await page.getByLabel('Dompet sumber').selectOption({label:'Bank utama · Rp1.000.000'});await page.getByLabel('Dompet tujuan').selectOption({label:'Tunai'});await page.getByRole('button',{name:'Simpan transfer'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Catat pengeluaran',exact:true}).click();await page.getByLabel('Nama catatan').fill('Makan siang');await page.getByLabel('Nominal (Rp)').fill('25000');await page.getByLabel('Dompet sumber').selectOption({label:'Tunai · Rp600.000'});
+    expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+    await page.getByRole('button',{name:'Simpan pengeluaran'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.reload();await page.getByRole('button',{name:'Transaksi',exact:true}).click();await expect(page.getByText('Makan siang',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Ubah transaksi Makan siang'}).click();await page.getByLabel('Nominal (Rp)').fill('30000');await page.getByRole('button',{name:'Simpan pengeluaran'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByText('−Rp30.000',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Catat pengeluaran',exact:true}).click();await page.getByLabel('Nama catatan').fill('Terlalu besar');await page.getByLabel('Nominal (Rp)').fill('99999999');await page.getByRole('button',{name:'Simpan pengeluaran'}).click();await expect(page.getByRole('alert')).toContainText('Saldo dompet tidak cukup');await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'Catat pengeluaran',exact:true})).toBeFocused();
+    await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+    await page.getByRole('button',{name:'Akun & data',exact:true}).click();const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Unduh seluruh data saya (JSON)'}).click();const download=await downloadPromise;expect(download.suggestedFilename()).toContain('goplan-');
+    await page.getByRole('button',{name:'Hapus akun dan seluruh data',exact:true}).click();await page.getByLabel('Kata sandi saat ini').fill(user.password);await page.getByLabel('Ketik HAPUS untuk mengonfirmasi').fill('HAPUS');await page.getByRole('button',{name:'Hapus akun permanen'}).click();await expect(page.getByRole('heading',{name:'Masuk ke GoPlan'})).toBeVisible();
+    const removed=await admin.auth.admin.getUserById(user.id);expect(removed.error).not.toBeNull();expect(errors).toEqual([]);
+  });
+  test('real RLS isolates users and serializes simultaneous expenses',async()=>{
+    const a=await createTestUser(admin),b=await createTestUser(admin);users.push(a,b);
+    const clients=[a,b].map(()=>createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}));
+    for(const [i,u] of [a,b].entries()){const {error}=await clients[i].auth.signInWithPassword(u);expect(error).toBeNull();}
+    const wallet=crypto.randomUUID();
+    const save=await clients[0].rpc('mutate_account',{p_action:'save_wallet',p_payload:{id:wallet,name:'Race wallet',kind:'cash',opening_balance:100000},p_request_id:crypto.randomUUID()});expect(save.error).toBeNull();
+    const foreign=await clients[1].from('wallets').select('*').eq('id',wallet);expect(foreign.data).toEqual([]);
+    const responses=await Promise.all([1,2].map(n=>clients[0].rpc('mutate_account',{p_action:'save_entry',p_payload:{id:crypto.randomUUID(),name:'Expense '+n,kind:'expense',wallet_id:wallet,to_wallet_id:null,amount:75000,category:'food',date:todayJakarta()},p_request_id:crypto.randomUUID()})));
+    expect(responses.filter(r=>!r.error)).toHaveLength(1);expect(responses.filter(r=>r.error)).toHaveLength(1);
+    const {data}=await clients[0].rpc('get_account');expect(data.entries).toHaveLength(1);
+    const forbidden=await clients[1].rpc('mutate_account',{p_action:'delete_entry',p_payload:{id:data.entries[0].id},p_request_id:crypto.randomUUID()});expect(forbidden.error).not.toBeNull();
+    for(const client of clients) await client.auth.signOut();
+  });
+});

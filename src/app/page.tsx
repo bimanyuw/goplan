@@ -1,3 +1,2 @@
-import Dashboard from '@/components/dashboard';
-export default function Page() { return <Dashboard />; }
-
+import AccountApp from '@/components/account-app';
+export default function Page() { return <AccountApp />; }
